@@ -2,53 +2,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
-
-typedef struct QuadtreeNode {
-    unsigned char blue, green, red ;
-    /*nr de pixeli din blocul descris de nod*/
-    uint32_t area;
-    int32_t top_left , top_right ;
-    int32_t bottom_left , bottom_right ;
-} __attribute__ ( ( packed ) ) QuadtreeNode ;
-
-
-typedef struct CompressedFile {
-    /*nr de blocuri, cu informaţie utilă,
-    utilizate în cadrul procesului de compresie 
-    (numărul de frunze ale arborelui cuaternar de compresie) */
-    uint32_t numar_culori;
-
-    /*nr total de noduri ale arborelui cuaternar*/
-    uint32_t numar_noduri;
-
-    /*un vector care conţine număr_noduri elemente de tip structură QuadtreeNode,
-    fiecare element reprezentând un nod din arborele de compresie creat */
-    int *vector;
-} CompressedFile;
-
-typedef struct Color {
-    unsigned char r;
-    unsigned char g;
-    unsigned char b;
-} Color;
-
-typedef struct Node {
-    Color pixel;
-    uint32_t s_size;
-    struct Node* q1;
-    struct Node* q2;
-    struct Node* q3;
-    struct Node* q4;
-    int isLeaf;
-    int offset;
-
-    int q;
-    int h_start;
-    int h_end;
-    int w_start;
-    int w_end;
-    int64_t mean;
-} Node;
+#include "Queue.h"
 
 void print_tree(Node* root, int depth) {
     if (root == NULL)
@@ -66,10 +20,10 @@ void print_tree(Node* root, int depth) {
     print_tree(root->q4, depth + 1);
 }
 
-int64_t compute_mean(Node* node, Color** img) {
-    int64_t r_med = 0;
-    int64_t g_med = 0;
-    int64_t b_med = 0;
+int compute_mean(Node* node, Color** img) {
+    long long r_med = 0;
+    long long g_med = 0;
+    long long b_med = 0;
     for (int i = node->h_start; i < node->h_end; i++) {
         for (int j = node->w_start; j < node->w_end; j++) {
             r_med += img[i][j].r;
@@ -78,13 +32,13 @@ int64_t compute_mean(Node* node, Color** img) {
         }
     }
 
-    int64_t size = node->s_size;
+    long long size = node->s_size;
 
     r_med /= size * size;
     g_med /= size * size;
     b_med /= size * size;
 
-    int64_t sum = 0;
+    long long sum = 0;
     for (int i = node->h_start; i < node->h_end; i++) {
         for (int j = node->w_start; j < node->w_end; j++) {
             sum +=  (r_med - img[i][j].r) * (r_med - img[i][j].r) +
@@ -93,7 +47,7 @@ int64_t compute_mean(Node* node, Color** img) {
         }
     }
 
-    int64_t mean = sum / (3 * size * size);
+    long long mean = sum / (3 * size * size);
 
     node->pixel.r = r_med;
     node->pixel.g = g_med;
@@ -104,102 +58,132 @@ int64_t compute_mean(Node* node, Color** img) {
 
 void split_in4(Node* root, Color** img, double prag, int depth) {
 
-    int offset_h = 0, offset_w = 0;
-    if (root->q == 1) {
-        offset_h = 0;
-        offset_w = 0;
-    } else if (root->q == 2) {
-        offset_h = 0;
-        offset_w = 0;
-    } else if (root->q == 3) {
-        offset_h = 0;
-        offset_w = 0;
-    } else if (root->q == 4) {
-        offset_h = 0;
-        offset_w = 0;
-    }
-
     Node* newNode1 = calloc(1, sizeof(Node));
+    Node* newNode2 = calloc(1, sizeof(Node));
+    Node* newNode3 = calloc(1, sizeof(Node));
+    Node* newNode4 = calloc(1, sizeof(Node));
 
-    newNode1->h_start = root->h_start + offset_h;
-    newNode1->h_end = root->h_end - root->s_size / 2 + offset_h;
-    newNode1->w_start = root->w_start + offset_w;
-    newNode1->w_end = root->w_end - root->s_size / 2 + offset_w;
+    // every node points to the size of tree
+    newNode1->size_of_tree = root->size_of_tree;
+    newNode2->size_of_tree = root->size_of_tree;
+    newNode3->size_of_tree = root->size_of_tree;
+    newNode4->size_of_tree = root->size_of_tree;
+
+    newNode1->nr_leafs = root->nr_leafs;
+    newNode2->nr_leafs = root->nr_leafs;
+    newNode3->nr_leafs = root->nr_leafs;
+    newNode4->nr_leafs = root->nr_leafs;
+
+    newNode1->h_start = root->h_start;
+    newNode1->h_end = root->h_end - root->s_size / 2;
+    newNode1->w_start = root->w_start;
+    newNode1->w_end = root->w_end - root->s_size / 2;
     newNode1->q = 1;
     newNode1->s_size = newNode1->w_end - newNode1->w_start;
 
-
-    Node* newNode2 = calloc(1, sizeof(Node));
-    newNode2->h_start = root->h_start + offset_h;
-    newNode2->h_end = root->h_end - root->s_size / 2 + offset_h;
-    newNode2->w_start = root->w_start + root->s_size / 2 + offset_w;
-    newNode2->w_end = root->w_end + offset_w;
+    newNode2->h_start = root->h_start;
+    newNode2->h_end = root->h_end - root->s_size / 2;
+    newNode2->w_start = root->w_start + root->s_size / 2;
+    newNode2->w_end = root->w_end;
     newNode2->q = 2;
     newNode2->s_size = root->s_size / 2;
 
-
-    Node* newNode3 = calloc(1, sizeof(Node));
-
-    newNode3->h_start = root->h_start + root->s_size / 2 + offset_h;
-    newNode3->h_end = root->h_end + offset_h;
-    newNode3->w_start = root->w_start + root->s_size / 2 + offset_w;
-    newNode3->w_end = root->w_end + offset_w;
+    newNode3->h_start = root->h_start + root->s_size / 2;
+    newNode3->h_end = root->h_end;
+    newNode3->w_start = root->w_start + root->s_size / 2;
+    newNode3->w_end = root->w_end;
     newNode3->q = 3;
     newNode3->s_size = root->s_size / 2;
 
-
-    Node* newNode4 = calloc(1, sizeof(Node));
-
-    newNode4->h_start = root->h_start + root->s_size / 2 + offset_h;
-    newNode4->h_end = root->h_end + offset_h;
-    newNode4->w_start = root->w_start + offset_w;
-    newNode4->w_end = root->w_end - root->s_size / 2 + offset_w;
+    newNode4->h_start = root->h_start + root->s_size / 2;
+    newNode4->h_end = root->h_end;
+    newNode4->w_start = root->w_start;
+    newNode4->w_end = root->w_end - root->s_size / 2;
     newNode4->q = 4;
     newNode4->s_size = root->s_size / 2;
+
+
 
     newNode1->mean = compute_mean(newNode1, img);
     if (newNode1->mean > prag) {
         newNode1->isLeaf = 0;
         split_in4(newNode1, img, prag, depth + 1);
-        root->q1 = newNode1;
-    }
-    else {
+    } else {
         newNode1->isLeaf = 1;
-        root->q1 = newNode1;
+        *(root->nr_leafs) += 1;
     }
+
+    
     
     newNode2->mean = compute_mean(newNode2, img);
     if (newNode2->mean > prag) {
         newNode2->isLeaf = 0;
         split_in4(newNode2, img, prag, depth + 1);
-        root->q2 = newNode2;
-
-    }
-    else {
+    } else {
         newNode2->isLeaf = 1;
-        root->q2 = newNode2;
+        *(root->nr_leafs) += 1;
     }
 
     newNode3->mean = compute_mean(newNode3, img);
     if (newNode3->mean > prag) {
         newNode3->isLeaf = 0;
         split_in4(newNode3, img, prag, depth + 1);
-        root->q3 = newNode3;
-    }  
-    else {
+    } else {
         newNode3->isLeaf = 1;
-        root->q3 = newNode3;
+        *(root->nr_leafs) += 1;
     }
 
     newNode4->mean = compute_mean(newNode4, img);
     if (newNode4->mean > prag) {
         newNode4->isLeaf = 0;
         split_in4(newNode4, img, prag, depth + 1);
-        root->q4 = newNode4;
-    }  
-    else {
+    } else {
         newNode4->isLeaf = 1;
-        root->q4 = newNode4;
+        *(root->nr_leafs) += 1;
+    }
+
+    *(root->size_of_tree) += 4;
+
+    root->q1 = newNode1;
+    root->q2 = newNode2;
+    root->q3 = newNode3;
+    root->q4 = newNode4;
+}
+
+void populate_vec(QuadtreeNode* vec, Node* root) {
+    Queue* q = createQueue();
+    enqueue(q, root);
+
+    Node* t;
+    int i = 0;
+    while(!isQueueEmpty(q)) {
+        t = front(q);
+        dequeue(q);
+        vec[i].area = t->s_size * t->s_size;
+        vec[i].red = t->pixel.r;
+        vec[i].green = t->pixel.g;
+        vec[i].blue = t->pixel.b;
+        if (!t->isLeaf) {
+            vec[i].top_left = 4*i + 1;
+            vec[i].top_right = 4*i + 2;
+            vec[i].bottom_right = 4*i + 3;
+            vec[i].bottom_left = 4*i + 4;
+            i++;
+        } else {
+            vec[i].top_left = -1;
+            vec[i].top_right = -1;
+            vec[i].bottom_right = -1;
+            vec[i].bottom_left = -1;
+            i++;
+        }
+
+        if (t->isLeaf != 1) {
+            enqueue(q, t->q1);
+            enqueue(q, t->q2);
+            enqueue(q, t->q3);
+            enqueue(q, t->q4);
+        }
+
     }
 }
 
@@ -210,7 +194,7 @@ int main(int argc, char** argv) {
         char* line = malloc(50);
         fscanf(fp, "%s", line);
         int width = -1, height = -1, maxColorVal;
-        fscanf(fp, "%d %d %d", &width, &height, &maxColorVal);
+        fscanf(fp, "%d %d %d\n", &width, &height, &maxColorVal);
 
         Color** img = calloc(height, sizeof(Color*));
         for (int i = 0; i < height; i++) {
@@ -252,8 +236,24 @@ int main(int argc, char** argv) {
         root->w_end = width;
         root->mean = 1;
 
+
+        int size_of_tree = 1;
+        int nr_leafs = 0;
+        root->size_of_tree = &size_of_tree;
+        root->nr_leafs = &nr_leafs;
+
         split_in4(root, img, prag, 0);
 
+        CompressedFile* compressedFile = malloc(1 * sizeof(CompressedFile));
+        compressedFile->numar_culori = *root->nr_leafs;
+        compressedFile->numar_noduri = *root->size_of_tree;
+        compressedFile->vector = calloc(compressedFile->numar_noduri, sizeof(QuadtreeNode));
+        
+        populate_vec(compressedFile->vector, root);
+
+        for (int i = 0; i < compressedFile->numar_noduri; i++) {
+            printf("%d %d\n", compressedFile->vector[i].area, compressedFile->vector[i].top_left);
+        }
         print_tree(root, 0);
 
     }
