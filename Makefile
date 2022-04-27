@@ -1,4 +1,4 @@
 build:
-	gcc p.c -o quadtree
+	gcc -std=c99 p.c -o quadtree
 clean:
-	rm p
+	rm quadtree

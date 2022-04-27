@@ -1,3 +1,8 @@
+#include <stdio.h>
+#include <stdint.h>
+#include <string.h>
+#include <stdlib.h>
+
 typedef struct QuadtreeNode {
     unsigned char blue, green, red ;
     /*nr de pixeli din blocul descris de nod*/

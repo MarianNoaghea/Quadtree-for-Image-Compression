@@ -3,6 +3,11 @@
 #include <string.h>
 #include <stdlib.h>
 #include "Queue.h"
+// #include "Stack.h"
+
+
+
+int ind = 0;
 
 void print_tree(Node* root, int depth) {
     if (root == NULL)
@@ -151,50 +156,65 @@ void split_in4(Node* root, Color** img, double prag, int depth) {
 }
 
 void populate_vec(QuadtreeNode* vec, Node* root) {
+    // if (root == NULL)
+    //     return;
+
     Queue* q = createQueue();
     enqueue(q, root);
 
     Node* t;
     int i = 0;
+    int it = 0;
     while(!isQueueEmpty(q)) {
         t = front(q);
         dequeue(q);
-        vec[i].area = t->s_size * t->s_size;
-        vec[i].red = t->pixel.r;
-        vec[i].green = t->pixel.g;
-        vec[i].blue = t->pixel.b;
+        vec[it].area = t->s_size * t->s_size;
+        vec[it].red = t->pixel.r;
+        vec[it].green = t->pixel.g;
+        vec[it].blue = t->pixel.b;
         if (!t->isLeaf) {
-            vec[i].top_left = 4*i + 1;
-            vec[i].top_right = 4*i + 2;
-            vec[i].bottom_right = 4*i + 3;
-            vec[i].bottom_left = 4*i + 4;
-            i++;
-        } else {
-            vec[i].top_left = -1;
-            vec[i].top_right = -1;
-            vec[i].bottom_right = -1;
-            vec[i].bottom_left = -1;
-            i++;
-        }
+            vec[it].top_left = 4*i + 1;
+            vec[it].top_right = 4*i + 2;
+            vec[it].bottom_right = 4*i + 3;
+            vec[it].bottom_left = 4*i + 4;
 
-        if (t->isLeaf != 1) {
             enqueue(q, t->q1);
             enqueue(q, t->q2);
             enqueue(q, t->q3);
             enqueue(q, t->q4);
+
+            i++;
+
+        } else {
+            vec[it].top_left = -1;
+            vec[it].top_right = -1;
+            vec[it].bottom_right = -1;
+            vec[it].bottom_left = -1;
         }
 
+        it++;
     }
 }
 
 int main(int argc, char** argv) {
     if (strcmp(argv[1], "-c") == 0) {
-        double prag = atoi(argv[2]);
         FILE* fp = fopen(argv[3], "r");
+        long filelen;
+        fseek(fp, 0, SEEK_END);          
+        filelen = ftell(fp);
+        printf("filelen = %ld\n", filelen);
+        rewind(fp);                   
+        char* buffer = (char *)malloc((filelen+1)*sizeof(char));
+        unsigned char r;
+        unsigned char g;
+        unsigned char b;
+        int width = 0, height = 0, maxColorVal;
+        
         char* line = malloc(50);
-        fscanf(fp, "%s", line);
-        int width = -1, height = -1, maxColorVal;
-        fscanf(fp, "%d %d %d\n", &width, &height, &maxColorVal);
+        fscanf(fp, "%s\n", line);
+        fscanf(fp, "%d %d\n", &width, &height);
+        fscanf(fp, "%d\n", &maxColorVal);
+        printf("w=%d,h=%d, max=%d\n", width, height, maxColorVal);
 
         Color** img = calloc(height, sizeof(Color*));
         for (int i = 0; i < height; i++) {
@@ -204,10 +224,13 @@ int main(int argc, char** argv) {
         int64_t r_med = 0;
         int64_t g_med = 0;
         int64_t b_med = 0;
+
         for (int i = 0; i < height; i++) {
             for (int j = 0; j < width; j++) {
-                unsigned char r, g, b;
-                fscanf(fp, "%c%c%c", &r, &g, &b);
+                fread(&r, sizeof(unsigned char), 1, fp);
+                fread(&g, sizeof(unsigned char), 1, fp);
+                fread(&b, sizeof(unsigned char), 1, fp);
+
                 img[i][j].r = r;
                 img[i][j].g = g;
                 img[i][j].b = b;
@@ -215,9 +238,13 @@ int main(int argc, char** argv) {
                 r_med += img[i][j].r;
                 g_med += img[i][j].g;
                 b_med += img[i][j].b;
+                // printf("%d\n", r);
+                // printf("%d\n", g);
+                // printf("%d\n", b);
             }
         }
 
+        double prag = atoi(argv[2]);
 
         r_med /= height * width;
         g_med /= height * width;
@@ -242,6 +269,7 @@ int main(int argc, char** argv) {
         root->size_of_tree = &size_of_tree;
         root->nr_leafs = &nr_leafs;
 
+
         split_in4(root, img, prag, 0);
 
         CompressedFile* compressedFile = malloc(1 * sizeof(CompressedFile));
@@ -252,9 +280,29 @@ int main(int argc, char** argv) {
         populate_vec(compressedFile->vector, root);
 
         for (int i = 0; i < compressedFile->numar_noduri; i++) {
-            printf("%d %d\n", compressedFile->vector[i].area, compressedFile->vector[i].top_left);
+            // printf("(%d %d, %d, %d, %d, %d) ", compressedFile->vector[i].area, compressedFile->vector[i].top_left,
+            // compressedFile->vector[i].top_right, compressedFile->vector[i].bottom_left, compressedFile->vector[i].bottom_right,
+            // compressedFile->vector[i].blue);
         }
-        print_tree(root, 0);
+
+        FILE* fp_out = fopen(argv[4], "w");
+        fwrite(&compressedFile->numar_culori, sizeof(uint32_t), 1, fp_out);
+        fwrite(&compressedFile->numar_noduri, sizeof(uint32_t), 1, fp_out);
+        for (int i = 0; i < compressedFile->numar_noduri; i++) {
+            fwrite(&compressedFile->vector[i].blue , sizeof(unsigned char), 1, fp_out);
+            fwrite(&compressedFile->vector[i].green , sizeof(unsigned char), 1, fp_out);
+            fwrite(&compressedFile->vector[i].red , sizeof(unsigned char), 1, fp_out);
+
+            fwrite(&compressedFile->vector[i].area , sizeof(uint32_t), 1, fp_out);
+            
+            fwrite(&compressedFile->vector[i].top_left , sizeof(int32_t), 1, fp_out);
+            fwrite(&compressedFile->vector[i].top_right , sizeof(int32_t), 1, fp_out);
+            fwrite(&compressedFile->vector[i].bottom_left , sizeof(int32_t), 1, fp_out);
+            fwrite(&compressedFile->vector[i].bottom_right , sizeof(int32_t), 1, fp_out);
+        }
+
+
+        // print_tree(root, 0);
 
     }
     return 0;
