@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
+#include <math.h>
 #include "Queue.h"
 // #include "Stack.h"
 
@@ -156,8 +157,8 @@ void split_in4(Node* root, Color** img, double prag, int depth) {
 }
 
 void populate_vec(QuadtreeNode* vec, Node* root) {
-    // if (root == NULL)
-    //     return;
+    if (root == NULL)
+        return;
 
     Queue* q = createQueue();
     enqueue(q, root);
@@ -191,9 +192,27 @@ void populate_vec(QuadtreeNode* vec, Node* root) {
             vec[it].bottom_right = -1;
             vec[it].bottom_left = -1;
         }
-
         it++;
     }
+
+    destroyQueue(q);
+}
+
+void free_tree(Node* root) {
+    if (root == NULL)
+        return;
+
+    Node* toBeDeleted = root;
+    if (!root->isLeaf) {
+        free_tree(root->q1);
+        free_tree(root->q2);
+        free_tree(root->q3);
+        free_tree(root->q4);
+    }
+    
+
+    free(toBeDeleted);
+
 }
 
 int main(int argc, char** argv) {
@@ -202,9 +221,7 @@ int main(int argc, char** argv) {
         long filelen;
         fseek(fp, 0, SEEK_END);          
         filelen = ftell(fp);
-        printf("filelen = %ld\n", filelen);
         rewind(fp);                   
-        char* buffer = (char *)malloc((filelen+1)*sizeof(char));
         unsigned char r;
         unsigned char g;
         unsigned char b;
@@ -212,9 +229,9 @@ int main(int argc, char** argv) {
         
         char* line = malloc(50);
         fscanf(fp, "%s\n", line);
+        free(line);
         fscanf(fp, "%d %d\n", &width, &height);
         fscanf(fp, "%d\n", &maxColorVal);
-        printf("w=%d,h=%d, max=%d\n", width, height, maxColorVal);
 
         Color** img = calloc(height, sizeof(Color*));
         for (int i = 0; i < height; i++) {
@@ -238,9 +255,6 @@ int main(int argc, char** argv) {
                 r_med += img[i][j].r;
                 g_med += img[i][j].g;
                 b_med += img[i][j].b;
-                // printf("%d\n", r);
-                // printf("%d\n", g);
-                // printf("%d\n", b);
             }
         }
 
@@ -272,18 +286,18 @@ int main(int argc, char** argv) {
 
         split_in4(root, img, prag, 0);
 
+        for (int i = 0; i < height; i++) {
+            free(img[i]);
+        }
+
+        free(img);
+
         CompressedFile* compressedFile = malloc(1 * sizeof(CompressedFile));
         compressedFile->numar_culori = *root->nr_leafs;
         compressedFile->numar_noduri = *root->size_of_tree;
         compressedFile->vector = calloc(compressedFile->numar_noduri, sizeof(QuadtreeNode));
         
         populate_vec(compressedFile->vector, root);
-
-        for (int i = 0; i < compressedFile->numar_noduri; i++) {
-            // printf("(%d %d, %d, %d, %d, %d) ", compressedFile->vector[i].area, compressedFile->vector[i].top_left,
-            // compressedFile->vector[i].top_right, compressedFile->vector[i].bottom_left, compressedFile->vector[i].bottom_right,
-            // compressedFile->vector[i].blue);
-        }
 
         FILE* fp_out = fopen(argv[4], "w");
         fwrite(&compressedFile->numar_culori, sizeof(uint32_t), 1, fp_out);
@@ -301,9 +315,85 @@ int main(int argc, char** argv) {
             fwrite(&compressedFile->vector[i].bottom_right , sizeof(int32_t), 1, fp_out);
         }
 
-
-        // print_tree(root, 0);
-
+        free_tree(root);
+        free(compressedFile->vector);
+        free(compressedFile);
+        fclose(fp);
+        fclose(fp_out);
     }
+
+    if (strcmp(argv[1], "-d") == 0) {
+        // ./quadtree -d compress1_370.out decompress1.ppm
+        FILE* fp = fopen(argv[2], "r");
+        long filelen;
+        fseek(fp, 0, SEEK_END);          
+        filelen = ftell(fp);
+        printf("filelen = %ld\n", filelen);
+        rewind(fp);
+
+        int colors, size;
+        fread(&colors, sizeof(int), 1, fp);
+        fread(&size, sizeof(int), 1, fp);
+        printf("c=%d, s=%d\n", colors, size);
+
+        unsigned char r;
+        unsigned char g;
+        unsigned char b;
+        uint32_t area;
+        int32_t q1, q2;
+        int32_t q3, q4;
+
+        CompressedFile* compressedFile = malloc(1 * sizeof(CompressedFile));
+        compressedFile->numar_culori = colors;
+        compressedFile->numar_noduri = size;
+        compressedFile->vector = calloc(compressedFile->numar_noduri, sizeof(QuadtreeNode));
+
+        for (int i = 0; i < size; i++) {
+            fread(&r, sizeof(unsigned char), 1, fp);
+            fread(&g, sizeof(unsigned char), 1, fp);
+            fread(&b, sizeof(unsigned char), 1, fp);
+
+            fread(&area, sizeof(uint32_t), 1, fp);
+
+            fread(&q1, sizeof(int32_t), 1, fp);
+            fread(&q2, sizeof(int32_t), 1, fp);
+            fread(&q3, sizeof(int32_t), 1, fp);
+            fread(&q4, sizeof(int32_t), 1, fp);
+
+            compressedFile->vector[i].red = r;
+            compressedFile->vector[i].green = g;
+            compressedFile->vector[i].blue = b;
+
+            compressedFile->vector[i].area = area;
+
+            compressedFile->vector[i].top_left = q1;
+            compressedFile->vector[i].top_right = q2;
+            compressedFile->vector[i].bottom_right = q3;
+            compressedFile->vector[i].bottom_left = q4;
+        }
+
+        Node* root = calloc(1, sizeof(Node));
+        QuadtreeNode rt = compressedFile->vector[0];
+        root->pixel.r = rt.red;
+        root->pixel.g = rt.green;
+        root->pixel.b = rt.blue;
+        root->s_size = sqrt(rt.area);
+        root->offset = 0;
+        root->q = 1;
+        root->h_start = 0;
+        root->h_end = root->s_size;
+        root->w_start = 0;
+        root->w_end = root->s_size;
+        root->mean = 1;
+
+        root->size_of_tree = &size;
+        root->nr_leafs = &colors;
+
+        // createTree(root, )
+
+
+        
+    }
+
     return 0;
 }
