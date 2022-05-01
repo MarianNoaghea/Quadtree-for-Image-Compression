@@ -190,7 +190,7 @@ void createTree(Node* root, CompressedFile* compressedFile) {
     
 }
 
-void split_in4(Node* root, Color** img, double prag, int depth) {
+void split_in4(Node* root, Color** img, double prag) {
 
     Node* newNode1 = calloc(1, sizeof(Node));
     Node* newNode2 = calloc(1, sizeof(Node));
@@ -235,7 +235,7 @@ void split_in4(Node* root, Color** img, double prag, int depth) {
     newNode1->mean = compute_mean(newNode1, img);
     if (newNode1->mean > prag) {
         newNode1->isLeaf = 0;
-        split_in4(newNode1, img, prag, depth + 1);
+        split_in4(newNode1, img, prag);
     } else {
         newNode1->isLeaf = 1;
         *(root->nr_leafs) += 1;
@@ -246,7 +246,7 @@ void split_in4(Node* root, Color** img, double prag, int depth) {
     newNode2->mean = compute_mean(newNode2, img);
     if (newNode2->mean > prag) {
         newNode2->isLeaf = 0;
-        split_in4(newNode2, img, prag, depth + 1);
+        split_in4(newNode2, img, prag);
     } else {
         newNode2->isLeaf = 1;
         *(root->nr_leafs) += 1;
@@ -255,7 +255,7 @@ void split_in4(Node* root, Color** img, double prag, int depth) {
     newNode3->mean = compute_mean(newNode3, img);
     if (newNode3->mean > prag) {
         newNode3->isLeaf = 0;
-        split_in4(newNode3, img, prag, depth + 1);
+        split_in4(newNode3, img, prag);
     } else {
         newNode3->isLeaf = 1;
         *(root->nr_leafs) += 1;
@@ -264,7 +264,7 @@ void split_in4(Node* root, Color** img, double prag, int depth) {
     newNode4->mean = compute_mean(newNode4, img);
     if (newNode4->mean > prag) {
         newNode4->isLeaf = 0;
-        split_in4(newNode4, img, prag, depth + 1);
+        split_in4(newNode4, img, prag);
     } else {
         newNode4->isLeaf = 1;
         *(root->nr_leafs) += 1;
@@ -335,75 +335,158 @@ void free_tree(Node* root) {
     free(toBeDeleted);
 }
 
-int main(int argc, char** argv) {
-    if (strcmp(argv[1], "-c") == 0) {
-        FILE* fp = fopen(argv[3], "r");
-        long filelen;
-        fseek(fp, 0, SEEK_END);          
-        filelen = ftell(fp);
-        rewind(fp);                   
-        unsigned char r;
-        unsigned char g;
-        unsigned char b;
-        int width = 0, height = 0, maxColorVal;
-        
+void buildTree(Node** root, Color*** img, int *width, int* height, double prag, FILE* fp) {
+        int maxColorVal;
         char* line = malloc(50);
         fscanf(fp, "%s\n", line);
         free(line);
-        fscanf(fp, "%d %d\n", &width, &height);
+        fscanf(fp, "%d %d\n", width, height);
         fscanf(fp, "%d\n", &maxColorVal);
 
-        Color** img = calloc(height, sizeof(Color*));
-        for (int i = 0; i < height; i++) {
-            img[i] = calloc(width, sizeof(Color));
+        *img = calloc(*height, sizeof(Color*));
+        for (int i = 0; i < *height; i++) {
+            (*img)[i] = calloc(*width, sizeof(Color));
         }
 
+        unsigned char r;
+        unsigned char g;
+        unsigned char b;
+        
         int64_t r_med = 0;
         int64_t g_med = 0;
         int64_t b_med = 0;
 
-        for (int i = 0; i < height; i++) {
-            for (int j = 0; j < width; j++) {
-                fread(&r, sizeof(unsigned char), 1, fp);
-                fread(&g, sizeof(unsigned char), 1, fp);
+        for (int i = 0; i < *height; i++) {
+            for (int j = 0; j < *width; j++) {
                 fread(&b, sizeof(unsigned char), 1, fp);
+                fread(&g, sizeof(unsigned char), 1, fp);
+                fread(&r, sizeof(unsigned char), 1, fp);
 
-                img[i][j].r = r;
-                img[i][j].g = g;
-                img[i][j].b = b;
+                (*img)[i][j].r = r;
+                (*img)[i][j].g = g;
+                (*img)[i][j].b = b;
 
-                r_med += img[i][j].r;
-                g_med += img[i][j].g;
-                b_med += img[i][j].b;
+                r_med += (*img)[i][j].r;
+                g_med += (*img)[i][j].g;
+                b_med += (*img)[i][j].b;
             }
         }
 
+        r_med /= *height * *width;
+        g_med /= *height * *width;
+        b_med /= *height * *width;
+
+        
+        (*root)->pixel.r = r_med;
+        (*root)->pixel.g = g_med;
+        (*root)->pixel.b = b_med;
+        (*root)->s_size = *width;
+        (*root)->offset = 0;
+        (*root)->h_start = 0;
+        (*root)->h_end = *height;
+        (*root)->w_start = 0;
+        (*root)->w_end = *width;
+        (*root)->mean = 1;
+
+        split_in4(*root, *img, prag);
+}
+
+void mirror(Node* root, char c) {
+    if (root->isLeaf)
+        return;
+
+    Node* n1 = root->q1;
+    Node* n2 = root->q2;
+    Node* n3 = root->q3;
+    Node* n4 = root->q4;
+
+    if (c == 'v') {
+        // 1 cu 4
+        // 2 cu 3
+
+        n4->h_start = root->h_start;
+        n4->h_end = root->h_end - root->s_size / 2;
+        n4->w_start = root->w_start;
+        n4->w_end = root->w_end - root->s_size / 2;
+        n4->s_size = n4->w_end - n4->w_start;
+
+        n1->h_start = root->h_start + root->s_size / 2;
+        n1->h_end = root->h_end;
+        n1->w_start = root->w_start;
+        n1->w_end = root->w_end - root->s_size / 2;
+        n1->s_size = root->s_size / 2;
+
+        n3->h_start = root->h_start;
+        n3->h_end = root->h_end - root->s_size / 2;
+        n3->w_start = root->w_start + root->s_size / 2;
+        n3->w_end = root->w_end;
+        n3->s_size = root->s_size / 2;
+
+        n2->h_start = root->h_start + root->s_size / 2;
+        n2->h_end = root->h_end;
+        n2->w_start = root->w_start + root->s_size / 2;
+        n2->w_end = root->w_end;
+        n2->s_size = root->s_size / 2;
+    }
+
+    if (c == 'h') {
+        // 1 cu 2
+        // 4 cu 3
+
+        n2->h_start = root->h_start;
+        n2->h_end = root->h_end - root->s_size / 2;
+        n2->w_start = root->w_start;
+        n2->w_end = root->w_end - root->s_size / 2;
+        n2->s_size = n2->w_end - n2->w_start;
+
+        n1->h_start = root->h_start;
+        n1->h_end = root->h_end - root->s_size / 2;
+        n1->w_start = root->w_start + root->s_size / 2;
+        n1->w_end = root->w_end;
+        n1->s_size = root->s_size / 2;
+
+        n4->h_start = root->h_start + root->s_size / 2;
+        n4->h_end = root->h_end;
+        n4->w_start = root->w_start + root->s_size / 2;
+        n4->w_end = root->w_end;
+        n4->s_size = root->s_size / 2;
+
+        n3->h_start = root->h_start + root->s_size / 2;
+        n3->h_end = root->h_end;
+        n3->w_start = root->w_start;
+        n3->w_end = root->w_end - root->s_size / 2;
+        n3->s_size = root->s_size / 2;
+
+    }
+
+    mirror(root->q1, c);
+    mirror(root->q2, c);
+    mirror(root->q3, c);
+    mirror(root->q4, c);
+    
+
+
+}
+
+int main(int argc, char** argv) {
+    if (strcmp(argv[1], "-c") == 0) {
+        FILE* fp = fopen(argv[3], "r");
+        fseek(fp, 0, SEEK_END);          
+        rewind(fp);                   
+        Node* root = calloc(1, sizeof(Node));;
         double prag = atoi(argv[2]);
+        Color** img;
 
-        r_med /= height * width;
-        g_med /= height * width;
-        b_med /= height * width;
 
-        Node* root = calloc(1, sizeof(Node));
-        root->pixel.r = r_med;
-        root->pixel.g = g_med;
-        root->pixel.b = b_med;
-        root->s_size = width;
-        root->offset = 0;
-        root->h_start = 0;
-        root->h_end = height;
-        root->w_start = 0;
-        root->w_end = width;
-        root->mean = 1;
-
+        int width = 0, height = 0; 
 
         int size_of_tree = 1;
         int nr_leafs = 0;
         root->size_of_tree = &size_of_tree;
         root->nr_leafs = &nr_leafs;
 
+        buildTree(&root, &img, &width, &height, prag, fp);
 
-        split_in4(root, img, prag, 0);
 
         for (int i = 0; i < height; i++) {
             free(img[i]);
@@ -422,9 +505,9 @@ int main(int argc, char** argv) {
         fwrite(&compressedFile->numar_culori, sizeof(uint32_t), 1, fp_out);
         fwrite(&compressedFile->numar_noduri, sizeof(uint32_t), 1, fp_out);
         for (int i = 0; i < compressedFile->numar_noduri; i++) {
-            fwrite(&compressedFile->vector[i].blue , sizeof(unsigned char), 1, fp_out);
-            fwrite(&compressedFile->vector[i].green , sizeof(unsigned char), 1, fp_out);
             fwrite(&compressedFile->vector[i].red , sizeof(unsigned char), 1, fp_out);
+            fwrite(&compressedFile->vector[i].green , sizeof(unsigned char), 1, fp_out);
+            fwrite(&compressedFile->vector[i].blue , sizeof(unsigned char), 1, fp_out);
 
             fwrite(&compressedFile->vector[i].area , sizeof(uint32_t), 1, fp_out);
             
@@ -530,6 +613,34 @@ int main(int argc, char** argv) {
 
         fclose(fp);
         fclose(fp_out);
+    }
+
+    if (strcmp(argv[1], "-m") == 0) {
+        FILE* fp = fopen(argv[4], "r");
+        FILE* fp_out = fopen(argv[5], "w");
+        fseek(fp, 0, SEEK_END);          
+        rewind(fp);                   
+        Node* root = calloc(1, sizeof(Node));;
+        double prag = atoi(argv[3]);
+        Color** img;
+
+        int width = 0, height = 0; 
+
+        int size_of_tree = 1;
+        int nr_leafs = 0;
+        root->size_of_tree = &size_of_tree;
+        root->nr_leafs = &nr_leafs;
+
+        buildTree(&root, &img, &width, &height, prag, fp);
+
+        char mirror_type = (char) argv[2][0];
+
+        mirror(root, mirror_type);
+
+        // print_tree(root, 0);
+
+
+        decompress_image(root, img, fp_out);
 
         
     }
