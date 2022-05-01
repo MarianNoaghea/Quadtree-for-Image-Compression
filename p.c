@@ -26,6 +26,44 @@ void print_tree(Node* root, int depth) {
     print_tree(root->q4, depth + 1);
 }
 
+void populate_img(Node* root, Color** img) {
+    if (root == NULL)
+        return;
+
+    if (root->isLeaf) {
+        for (int i = root->h_start; i < root->h_end; i++) {
+            for (int j = root->w_start; j < root->w_end; j++) {
+                img[i][j].r = root->pixel.r;
+                img[i][j].g = root->pixel.g;
+                img[i][j].b = root->pixel.b;
+            }
+        }
+    } else {
+        populate_img(root->q1, img);
+        populate_img(root->q2, img);
+        populate_img(root->q3, img);
+        populate_img(root->q4, img);
+    }
+}
+
+void decompress_image(Node* root, Color** img, FILE* fp_out) {
+    if (root == NULL)
+        return;
+
+    populate_img(root, img);
+
+    fwrite("P6\n", sizeof(char), 3, fp_out);
+    fprintf(fp_out, "%d %d\n", root->s_size, root->s_size);
+    fprintf(fp_out, "%d\n", 255);
+    
+    for (int i = 0; i < root->s_size; i++) {
+        for (int j = 0; j < root->s_size; j++) {
+            fprintf(fp_out, "%c%c%c", img[i][j].b, img[i][j].g, img[i][j].r);
+        } 
+    }
+}
+
+
 int compute_mean(Node* node, Color** img) {
     long long r_med = 0;
     long long g_med = 0;
@@ -62,6 +100,96 @@ int compute_mean(Node* node, Color** img) {
     return mean;
 }
 
+void createTree(Node* root, CompressedFile* compressedFile) {
+    QuadtreeNode rt = compressedFile->vector[root->ind];
+
+    if (rt.top_left != -1) {
+        Node* newNode1 = calloc(1, sizeof(Node));
+        Node* newNode2 = calloc(1, sizeof(Node));
+        Node* newNode3 = calloc(1, sizeof(Node));
+        Node* newNode4 = calloc(1, sizeof(Node));
+
+        newNode1->size_of_tree = root->size_of_tree;
+        newNode2->size_of_tree = root->size_of_tree;
+        newNode3->size_of_tree = root->size_of_tree;
+        newNode4->size_of_tree = root->size_of_tree;
+
+        newNode1->nr_leafs = root->nr_leafs;
+        newNode2->nr_leafs = root->nr_leafs;
+        newNode3->nr_leafs = root->nr_leafs;
+        newNode4->nr_leafs = root->nr_leafs;
+
+        newNode1->h_start = root->h_start;
+        newNode1->h_end = root->h_end - root->s_size / 2;
+        newNode1->w_start = root->w_start;
+        newNode1->w_end = root->w_end - root->s_size / 2;
+        newNode1->s_size = newNode1->w_end - newNode1->w_start;
+
+        newNode2->h_start = root->h_start;
+        newNode2->h_end = root->h_end - root->s_size / 2;
+        newNode2->w_start = root->w_start + root->s_size / 2;
+        newNode2->w_end = root->w_end;
+        newNode2->s_size = root->s_size / 2;
+
+        newNode3->h_start = root->h_start + root->s_size / 2;
+        newNode3->h_end = root->h_end;
+        newNode3->w_start = root->w_start + root->s_size / 2;
+        newNode3->w_end = root->w_end;
+        newNode3->s_size = root->s_size / 2;
+
+        newNode4->h_start = root->h_start + root->s_size / 2;
+        newNode4->h_end = root->h_end;
+        newNode4->w_start = root->w_start;
+        newNode4->w_end = root->w_end - root->s_size / 2;
+        newNode4->s_size = root->s_size / 2;
+
+        QuadtreeNode rt1 = compressedFile->vector[rt.top_left];
+        QuadtreeNode rt2 = compressedFile->vector[rt.top_right];
+        QuadtreeNode rt3 = compressedFile->vector[rt.bottom_right];
+        QuadtreeNode rt4 = compressedFile->vector[rt.bottom_left];
+
+        newNode1->pixel.r = rt1.red;
+        newNode1->pixel.g = rt1.green;
+        newNode1->pixel.b = rt1.blue;
+
+        newNode2->pixel.r = rt2.red;
+        newNode2->pixel.g = rt2.green;
+        newNode2->pixel.b = rt2.blue;
+
+        newNode3->pixel.r = rt3.red;
+        newNode3->pixel.g = rt3.green;
+        newNode3->pixel.b = rt3.blue;
+
+        newNode4->pixel.r = rt4.red;
+        newNode4->pixel.g = rt4.green;
+        newNode4->pixel.b = rt4.blue;
+
+        newNode1->ind = rt.top_left;
+        newNode2->ind = rt.top_right;
+        newNode3->ind = rt.bottom_right;
+        newNode4->ind = rt.bottom_left;
+
+
+        *(root->size_of_tree) += 4;
+
+        root->q1 = newNode1;
+        root->q2 = newNode2;
+        root->q3 = newNode3;
+        root->q4 = newNode4;
+
+        root->isLeaf = 0;
+
+        createTree(root->q1, compressedFile);
+        createTree(root->q2, compressedFile);
+        createTree(root->q3, compressedFile);
+        createTree(root->q4, compressedFile);
+    } else {
+        root->isLeaf = 1;
+        *(root->nr_leafs) += 1;
+    }
+    
+}
+
 void split_in4(Node* root, Color** img, double prag, int depth) {
 
     Node* newNode1 = calloc(1, sizeof(Node));
@@ -84,31 +212,25 @@ void split_in4(Node* root, Color** img, double prag, int depth) {
     newNode1->h_end = root->h_end - root->s_size / 2;
     newNode1->w_start = root->w_start;
     newNode1->w_end = root->w_end - root->s_size / 2;
-    newNode1->q = 1;
     newNode1->s_size = newNode1->w_end - newNode1->w_start;
 
     newNode2->h_start = root->h_start;
     newNode2->h_end = root->h_end - root->s_size / 2;
     newNode2->w_start = root->w_start + root->s_size / 2;
     newNode2->w_end = root->w_end;
-    newNode2->q = 2;
     newNode2->s_size = root->s_size / 2;
 
     newNode3->h_start = root->h_start + root->s_size / 2;
     newNode3->h_end = root->h_end;
     newNode3->w_start = root->w_start + root->s_size / 2;
     newNode3->w_end = root->w_end;
-    newNode3->q = 3;
     newNode3->s_size = root->s_size / 2;
 
     newNode4->h_start = root->h_start + root->s_size / 2;
     newNode4->h_end = root->h_end;
     newNode4->w_start = root->w_start;
     newNode4->w_end = root->w_end - root->s_size / 2;
-    newNode4->q = 4;
     newNode4->s_size = root->s_size / 2;
-
-
 
     newNode1->mean = compute_mean(newNode1, img);
     if (newNode1->mean > prag) {
@@ -210,9 +332,7 @@ void free_tree(Node* root) {
         free_tree(root->q4);
     }
     
-
     free(toBeDeleted);
-
 }
 
 int main(int argc, char** argv) {
@@ -270,7 +390,6 @@ int main(int argc, char** argv) {
         root->pixel.b = b_med;
         root->s_size = width;
         root->offset = 0;
-        root->q = 1;
         root->h_start = 0;
         root->h_end = height;
         root->w_start = 0;
@@ -325,16 +444,15 @@ int main(int argc, char** argv) {
     if (strcmp(argv[1], "-d") == 0) {
         // ./quadtree -d compress1_370.out decompress1.ppm
         FILE* fp = fopen(argv[2], "r");
+        FILE* fp_out = fopen(argv[3], "w");
         long filelen;
         fseek(fp, 0, SEEK_END);          
         filelen = ftell(fp);
-        printf("filelen = %ld\n", filelen);
         rewind(fp);
 
         int colors, size;
         fread(&colors, sizeof(int), 1, fp);
         fread(&size, sizeof(int), 1, fp);
-        printf("c=%d, s=%d\n", colors, size);
 
         unsigned char r;
         unsigned char g;
@@ -357,8 +475,8 @@ int main(int argc, char** argv) {
 
             fread(&q1, sizeof(int32_t), 1, fp);
             fread(&q2, sizeof(int32_t), 1, fp);
-            fread(&q3, sizeof(int32_t), 1, fp);
             fread(&q4, sizeof(int32_t), 1, fp);
+            fread(&q3, sizeof(int32_t), 1, fp);
 
             compressedFile->vector[i].red = r;
             compressedFile->vector[i].green = g;
@@ -379,7 +497,7 @@ int main(int argc, char** argv) {
         root->pixel.b = rt.blue;
         root->s_size = sqrt(rt.area);
         root->offset = 0;
-        root->q = 1;
+        root->ind = 0;
         root->h_start = 0;
         root->h_end = root->s_size;
         root->w_start = 0;
@@ -389,8 +507,29 @@ int main(int argc, char** argv) {
         root->size_of_tree = &size;
         root->nr_leafs = &colors;
 
-        // createTree(root, )
+        createTree(root, compressedFile);
+        print_tree(root, 0);
 
+        Color** img = calloc(root->s_size, sizeof(Color*));
+        for (int i = 0; i < root->s_size; i++) {
+            img[i] = calloc(root->s_size, sizeof(Color));
+        }
+
+        decompress_image(root, img, fp_out);
+
+        free(compressedFile->vector);
+        free(compressedFile);
+
+        for (int i = 0; i < root->s_size; i++) {
+            free(img[i]);
+        }
+
+        free(img);
+
+        free_tree(root);
+
+        fclose(fp);
+        fclose(fp_out);
 
         
     }

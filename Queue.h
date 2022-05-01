@@ -45,7 +45,7 @@ typedef struct Node {
     int isLeaf;
     int offset;
 
-    int q;
+    int ind;
     int h_start;
     int h_end;
     int w_start;
