@@ -4,5 +4,6 @@
         "stdio.h": "c",
         "stdint.h": "c",
         "queue.h": "c"
-    }
+    },
+    "C_Cpp.clang_format_fallbackStyle": "{ BasedOnStyle: LLVM, IndentWidth: 8, BreakBeforeBraces: Linux, UseTab: Always, IndentCaseLabels: false, AllowShortIfStatementsOnASingleLine: false }",
 }

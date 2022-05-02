@@ -1,61 +1,55 @@
-Comanda 1: ./quadtree -c 0 test0.ppm compress0_0.out
-Output-ul este: compress0_0.out
+Noaghea Marian-Florentin 333CC
 
-Comanda 2: ./quadtree -c 370 test1.ppm compress1_370.out
-Output-ul este: compress1_370.out
+Structura aleasa pentru reprezentarea unui nod din arborele de compresie a fost
+gandita in felul urmator, va contine:
+    -o culoare (structura ce contine 3 culori) medie
+    -4 pointeri spre nodurile copii 
+    -un size care reprezinta ce dimensiune are patratul
+    -4 indecsi care spun care este rangeul in care se vor mapa pixelii in imagine
+    -2 int pointeri spre care toate nodurile vor pointa, in acestia voi stii mereu
+     cate frunze si cate noduri sunt in arbore
 
-Comanda 3: ./quadtree -d compress1_370.out decompress1.ppm
-Output-ul este: decompress1.ppm
+Cerinta 1 - Compress
 
-Comanda 4: ./quadtree -m h 0 test0.ppm mirror0_h_0.ppm
-Output-ul este: mirror0_h_0.ppm
+*buildTree:
+Voi calcula culoarea medie si voi apela functia "split_in4" in 
+care se vor creea copii pentru  acel nod si daca meanul acelor copii va fi > prag 
+functia "split_in4" se va apela recursiv mai departe, creeind mai departe alte noduri copil.
 
-Comanda 5: ./quadtree -m v 0 test0.ppm mirror0_v_0.ppm
-Output-ul este: mirror0_v_0.ppm
+*populate_vec:
+Creez un vector de structuri QuadtreeNode.
+Dupa care ma folosesc de o coada pentru a parcurge BFS arborele si pentru a popula vectorul.
 
-Comanda 6: ./quadtree -m h 370 test1.ppm mirror1_h_370.ppm
-Output-ul este: mirror1_h_370.ppm
+*scriere in fisier:
+Dupa care parcurg vectorul creeat si scriu in fisierul de output la fel ca si in exemplul
+dat.
 
-Comanda 7: ./quadtree -m v 370 test1.ppm mirror1_v_370.ppm
-Output-ul este: mirror1_v_370.ppm
+Cerinta 2 - Decompress
 
-Pentru a compara rezultatele, checker-ul foloseste utilitarul diff. Fisierele trebuie
-sa fie identice la cerintele 2, 3, 4, iar la cerinta 1 se realizeaza decompresia,
-pornind de la fisierul comprimat generat de executabilul vostru, si se compara cu imaginea
-referinta.
+*populate_vec din fisier:
+Citesc din fisier si populez vectorul de QuadtreeNode
 
-Pentru primul exemplu, continutul text al fisierului binar este următorul:
-colors=4
-size=5
-________________________________
-index=0
-146 108 99
-65536
-1 2 3 4
-________________________________
-index=1
-97 57 105
-16384
--1 -1 -1 -1
-________________________________
-index=2
-184 246 67
-16384
--1 -1 -1 -1
-________________________________
-index=3
-99 69 59
-16384
--1 -1 -1 -1
-________________________________
-index=4
-204 60 167
-16384
--1 -1 -1 -1
-________________________________
+*createTree:
+Asemanator cu buildTree voi creea noduri dar de data aceasta pe baza vectorului
 
-Pentru fiecare element din vector sunt oferite informatiile in urmatoarea ordine:
-indexul
-red green blue
-area
-top_left top_right bottom_right bottom_left
+*decompress_image
+    *populate_img
+    Parcurg recursiv arborele si pentru fiecare nod voi popula matricea de pixeli img
+    *scrierea in fisier
+    Informatiile obtinute in urma parcurgerii si salvate in img le voi scrie in fisierul ppm.
+
+Cerinta 3 - Mirror
+
+*buildTree
+La fel ca la Compress
+
+*mirror
+voi parcurge intreg arborele si voi face swapp de informatii legate de maparea subarborilor
+pentru a obtine efectul dorit 'v' sau 'h'
+
+*decompress_image
+Parcurg arborele modificat, repopulez matricea img, apoi obtin noul fisier ppm.
+
+Feedback:
+O tema foarte interesanta, de dificulate medie, necesita foarte multa atentie.
+Timp de lucru: 3-4 zile adunate, cam 6 ore pe zi.
